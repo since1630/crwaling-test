@@ -28,7 +28,6 @@ app.get('/api', async (req, res) => {
     // 성공했을 경우
     .then((response) => {
       // 만약 content가 정상적으로 출력되지 않는다면, arraybuffer 타입으로 되어있기 때문일 수 있다.
-      // 현재는 string으로 반환되지만, 만약 다르게 출력된다면 뒤에 .toString() 메서드를 호출하면 된다.
       const content = iconv.decode(response.data, 'UTF-8');
       const $ = cheerio.load(content);
       // 사이드 커버 이미지 1개 선택
