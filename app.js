@@ -101,56 +101,68 @@ app.get('/api', async (req, res) => {
       return itemInfo;
     }
 
-    //todo: 여기서 부터 동적 크롤링
+    //todo: 여기서 동적 크롤링 시작합니다.
 
-    // 1. 크로미움 브라우저를 엽니다.
-    const browser = await puppeteer.launch({ headless: true }); // -> 여러 가지 옵션을 설정할 수 있습니다.
+    // 1. Chromium 브라우저를 엽니다.
+    const browser = await puppeteer.launch({ headless: false }); // -> 여러 가지 옵션을 설정할 수 있습니다.
 
     // 2. 페이지를 엽니다.
     const page = await browser.newPage();
-    // 브라우저 크기 설정
-    await page.setViewport({
-      width: 1920,
-      height: 1080,
-    });
 
-    const { query } = req.query;
-    // query = encodeURI(query);
-    console.log(query);
-    console.log(req.query);
-    if (!query) {
-      return res.status(404).json({ errMessage: '쿼리값이 없습니다' });
+    const { category, id } = req.query;
+
+    if (!category || !id) {
+      return res
+        .status(404)
+        .json({ errMessage: '두 가지 쿼리 값 모두 필요합니다' });
     }
-    const href = `https://ohou.se/productions/feed?type=store&query=${encodeURI(
-      query
-    )}&input_source=integrated`;
+
+    const href = `https://ohou.se/store/category?category=${category}&order=popular&affect_type=StoreHomeCategory&affect_id=${id}`;
 
     // 3. 링크로 이동합니다.
     await page.goto(`${href}`);
-    //   await page.waitForSelector('article.production-item');
     await page.waitForTimeout(1000);
-    let ehList = await page.$$('article.production-item');
 
     let idList = [];
-    for (let eh of ehList) {
-      let id = await (await eh.getProperty('id')).jsonValue();
-      id = id.replace(/product-/g, '');
-      idList.push(id);
+    let scrollCount = 0; // 스크롤 횟수를 세기 위한 카운터를 초기화합니다
+    let previousHeight;
+
+    while (scrollCount < 20) {
+      // scrollCount가 20이 될 때까지 반복문을 실행합니다
+      //   previousHeight = await page.evaluate('document.body.scrollHeight');
+      previousHeight = await page.evaluate('document.body.scrollHeight');
+      await page.evaluate('window.scrollTo(0, 100)');
+      await page.waitForTimeout(1000);
+
+      let ehList = await page.$$('article.production-item');
+      for (let eh of ehList) {
+        let id = await (await eh.getProperty('id')).jsonValue();
+        if (id === '') continue;
+        id = id.replace(/product-/g, '');
+        idList.push(id);
+      }
+      scrollCount++; // 반복문이 한 번 돌 때마다 scrollCount를 1 증가시킵니다
+      console.log(scrollCount);
     }
-    // //   4. HTML 정보를 가져옵니다.
-    // const content = await page.content();
 
-    // 5. 페이지와 브라우저를 닫습니다.
-    await page.close();
-    await browser.close();
+    // setTimeout(async () => {
+    //   clearInterval(infiniteScroll);
+    // }, 1000 * 10); // 10초 지나면 스크롤 종료
+    // // 5. 페이지와 브라우저를 닫습니다.
 
+    // * 위에서 받은 리스트의 원소를 하나 씩 getItemInfo에 삽입 -> Promise.all 처리
     const itemInfoResults = await Promise.all(
       idList.map(async (itemId) => {
         const itemInfo = await getItemInfo(itemId);
         console.log(itemInfo);
         return itemInfo;
+        // 만약 DB에 들어간다면?
+        // return await Item.create({brand: itemInfo.brand, name: itemInfo.name ... })
       })
     );
+    await page.close();
+    await browser.close();
+
     return res.status(200).json(itemInfoResults);
   }
 
