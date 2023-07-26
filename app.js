@@ -16,7 +16,7 @@ app.use(express.urlencoded({ extended: false }));
 //todo 3.각 상품에 해당하는 데이터 목록들을 크롤링 하면서 객체 형태로 배열에 담아준다.
 //todo 4.순회가 끝나면 배열에 각 상품에 대한 데이터들이 객체 형태로 있을 것이고 그걸 클라이언트 혹은 DB에 넘겨준다.
 
-router.get('/', async (req, res) => {
+app.get('/', async (req, res) => {
   // //todo puppeteer + axios & cheerio 사용
 
   async function runCrawler() {
@@ -36,6 +36,24 @@ router.get('/', async (req, res) => {
           // 현재는 string으로 반환되지만, 만약 다르게 출력된다면 뒤에 .toString() 메서드를 호출하면 된다.
           const content = iconv.decode(response.data, 'UTF-8');
           const $ = cheerio.load(content);
+
+          // 메인 커버 이미지 선택
+          const coverMainImage = $(
+            'body > div.page > div > div > div.production-selling > div.production-selling-overview.container > div > div.production-selling-overview__cover-image-wrap.col-12.col-md-6.col-lg-7 > div > div.carousel.production-selling-cover-image.production-selling-overview__cover-image > div.carousel__list-wrap.production-selling-cover-image__carousel-wrap'
+          )
+            .find('img.production-selling-cover-image__entry__image')
+            .attr('srcset')
+            .split(' ')[0];
+
+          const coverMainImage2 = $(
+            'body > div.page > div > div > div.production-selling > div.production-selling-overview.container > div > div.production-selling-overview__cover-image-wrap.col-12.col-md-6.col-lg-7 > div > div.carousel.production-selling-cover-image.production-selling-overview__cover-image > div.carousel__list-wrap.production-selling-cover-image__carousel-wrap'
+          )
+            .find('img.production-selling-cover-image__entry__image')
+            .attr('src');
+
+          // console.log(coverMainImage2);
+          // console.log(coverMainImage2.split(' ')[0]);
+
           // 사이드 커버 이미지 1개 선택
           const sideCoverImage = $(
             'body > div.page > div > div > div.production-selling > div.production-selling-overview.container > div > div.production-selling-overview__cover-image-wrap.col-12.col-md-6.col-lg-7 > div > div.carousel.production-selling-cover-image.production-selling-overview__cover-image > ul'
@@ -97,6 +115,7 @@ router.get('/', async (req, res) => {
             brand: brand,
             price: price,
             content: contentArr,
+            coverMainImage: coverMainImage,
           };
 
           // console.log(itemInfo);
@@ -198,14 +217,15 @@ router.get('/', async (req, res) => {
         return itemInfo; // DB 에 저장하는 과정 없이 곧바로 클라이언트에게 반환하는 경우 주석 해제한 후 이 코드 사용
 
         // 만약 DB에 저장 할거라면? 위의 return itemInfo; 코드라인을 주석 처리하고 아래의 코드를 주석 해제한 후 실행하면 된다.
-        // return await Items.create({
-        //   itemName: itemInfo.itemName,
-        //   category: itemInfo.category,
-        //   coverImage: JSON.stringify(itemInfo.coverImage), // DB의 coverImage 데이터 타입이 String이므로 문자열로 변환해줘야함.
-        //   brand: itemInfo.brand,
-        //   price: itemInfo.price,
-        //   content: JSON.stringify(itemInfo.content),
-        // });
+        return await Items.create({
+          itemName: itemInfo.itemName,
+          category: itemInfo.category,
+          coverImage: JSON.stringify(itemInfo.coverImage), // DB의 coverImage 데이터 타입이 String이므로 문자열로 변환해줘야함.
+          brand: itemInfo.brand,
+          price: itemInfo.price,
+          content: JSON.stringify(itemInfo.content),
+          coverMainImage: itemInfo.coverMainImage,
+        });
       })
     );
     // console.log(idList);
@@ -228,7 +248,6 @@ app.listen(process.env.PORT || 3000, (req, res) => {
 module.exports = router;
 
 //? 여기 부턴 일기장
-
 //   //todo 헤더 리스트에서 한 개의 항목에 대한 브랜드명, 제목, 가격을 추출
 //   let ehList = await page.$$(
 //     'body > div.page > div > div > div.production-feed.container > div:nth-child(4) > div'
