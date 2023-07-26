@@ -88,7 +88,7 @@ app.use(express.urlencoded({ extended: false }));
 const crwaling = async () => {
   //todo : puppeteer 로 크롤링
   // 1. 크로미움 브라우저를 엽니다.
-  const browser = await puppeteer.launch({ headless: true }); // -> 여러 가지 옵션을 설정할 수 있습니다.
+  const browser = await puppeteer.launch({ headless: true }); // headless: true 면 브라우저를 열어서 크롤링한다는 뜻.
 
   // 2. 페이지를 엽니다.
   const page = await browser.newPage();
@@ -101,11 +101,11 @@ const crwaling = async () => {
 
   await page.goto(`${href}`);
 
-  let resultsList = [];
+  let resultsList = []; // 크롤링 데이터가 담길 배열
 
   let ehList = await page.$$('#contact-us > div > nav'); // nav 탭 선택하기
   for (let eh of ehList) {
-    await eh.click(); // nav탭 안에 있는 요소 선택
+    // await eh.click(); // nav탭 안에 있는 요소 선택
     //   console.log(eh);
     let qnaCatecory = await eh.$eval('label.css-10kphwv', (e) => {
       return e.getAttribute('for');
@@ -131,10 +131,10 @@ const crwaling = async () => {
 
   let etcList = await page.$$('label.css-1d73fhs'); // nav 탭 선택하기
   for (let eh of etcList) {
-    console.log(eh);
-    console.log(await eh.click()); // nav탭 안에 있는 요소 선택
-    console.log(await (await eh.getProperty('for')).jsonValue()); //! 얘가 왜 undefined 가 나오지...?
-    //  await (await eh.getProperty('for')).jsonValue(); 로 쓰면 undefined 가 나오던데...?
+    // console.log(eh);
+    // console.log(await eh.click()); // nav탭 안에 있는 요소 선택
+    // console.log(await (await eh.getProperty('for')).jsonValue());
+
     let qnaCategory = await eh.evaluate((e) => {
       return e.getAttribute('for');
     });
@@ -158,14 +158,14 @@ const crwaling = async () => {
   }
   console.log(resultsList);
 
-  //   //* 만약 DB가 생긴다면 이 코드 실행하기
-  //     await Promise.all(resultsList.map(results => {
-  //         return await Help.create(results)
-  //     }))
+  //   //   //* 만약 DB가 생긴다면 이 코드 실행하기
+  //       await Promise.all(resultsList.map(results => {
+  //           return await Help.create(results)
+  //       }))
 };
 
 // //! 크롤링 코드 실행 하기
-// crwaling();
+crwaling();
 
 //   //todo : cheerio로 크롤링
 //   const qna = await axios({

@@ -5,18 +5,19 @@ const axios = require('axios');
 const iconv = require('iconv-lite');
 const cheerio = require('cheerio');
 const puppeteer = require('puppeteer');
+// const { Items } = require('../models');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 //todo 상품 크롤링
-//todo 1.상품의 아이디 값을 전부 배열로 받는다.
+//todo 1.상품의 아이디 값을 동적 크롤링을 이용해 전부 배열로 받는다.
 //todo 2.배열안에 있는 각 원소(상품 아이디)를 순회 하면서 crwaling 함수의 인자에 해당 원소를 넣어준다.
 //todo 3.각 상품에 해당하는 데이터 목록들을 크롤링 하면서 객체 형태로 배열에 담아준다.
-//todo 4.순회가 끝나면 배열에 각 상품에 대한 데이터들이 객체 형태로 있을 것이고 그걸 클라이언트에게 넘겨준다.
+//todo 4.순회가 끝나면 배열에 각 상품에 대한 데이터들이 객체 형태로 있을 것이고 그걸 클라이언트 혹은 DB에 넘겨준다.
 
-app.get('/api', async (req, res) => {
-  // //todo puppeteer 사용
+router.get('/', async (req, res) => {
+  // //todo puppeteer + axios & cheerio 사용
 
   async function runCrawler() {
     async function getItemInfo(itemId) {
@@ -66,8 +67,17 @@ app.get('/api', async (req, res) => {
           const categoryHeader = $(
             'body > div.page > div > div > div.production-selling > div.production-selling-overview.container > nav > ol > li:nth-child(1)'
           );
-          const category = categoryHeader.find('a.link').text();
-
+          let category = categoryHeader.find('a.link').text();
+          category =
+            category === '가구'
+              ? 1
+              : category === '패브릭'
+              ? 2
+              : category === '가전·디지털'
+              ? 3
+              : category === '주방용품'
+              ? 4
+              : 5;
           // 내용 사진 헤더
           const contentHeader = $(
             'div.production-selling-description__content img'
@@ -89,7 +99,7 @@ app.get('/api', async (req, res) => {
             content: contentArr,
           };
 
-          console.log(itemInfo);
+          // console.log(itemInfo);
 
           return itemInfo;
         })
@@ -97,14 +107,14 @@ app.get('/api', async (req, res) => {
         .catch((err) => {
           console.error(err);
         });
-      //! 위에서 받은 itemInfo 결과값을 반환 해주지 않고 있었군...
+
       return itemInfo;
     }
 
     //todo: 여기서 동적 크롤링 시작합니다.
 
     // 1. Chromium 브라우저를 엽니다.
-    const browser = await puppeteer.launch({ headless: false }); // -> 여러 가지 옵션을 설정할 수 있습니다.
+    const browser = await puppeteer.launch({ headless: false }); // headless: true 면 브라우저를 열어서 크롤링한다는 뜻.
 
     // 2. 페이지를 엽니다.
     const page = await browser.newPage();
@@ -121,49 +131,88 @@ app.get('/api', async (req, res) => {
 
     // 3. 링크로 이동합니다.
     await page.goto(`${href}`);
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1000); // 페이지 열리고 1초만 멈춰라
+
+    //todo : 크롤링 로직 설명
+    // 0.초기값 limit을 지정한다.
+    // 1.previous카운트에 현재 article.production에 해당하는 html태그의 갯수(크롤링 데이터 갯수)를 담는다.
+    // 2.puppeteer가 스크롤을 컨트롤 할 수 있게 evaluate 함수를 사용한다.
+    // 3.스크롤을 내렸으니 무한 스크롤에 의해 새로운 html태그가 여러개 생겼을텐데 그 갯수를 current카운트에 담아준다. 이때, accElementsCount에도 누적합산한다
+    // 4.새로운 태그가 갱신 되었으니 다시 3번 작업을 수행한다.
+    // 5.누적합산이 초기값 limit과 일치하거나 클 경우 크롤링을 중단하고 브라우저를 닫는다.
 
     let idList = [];
-    let scrollCount = 0; // 스크롤 횟수를 세기 위한 카운터를 초기화합니다
-    let previousHeight;
+    let limit = 50; // 원하는 크롤링 데이터 갯수 설정
 
-    while (scrollCount < 20) {
-      // scrollCount가 20이 될 때까지 반복문을 실행합니다
-      //   previousHeight = await page.evaluate('document.body.scrollHeight');
-      previousHeight = await page.evaluate('document.body.scrollHeight');
-      await page.evaluate('window.scrollTo(0, 100)');
-      await page.waitForTimeout(1000);
+    // let previousElementsCount = await page.$$eval(
+    //   'article.production-item',
+    //   (elements) => elements.length
+    // );
+    // console.log('previousElementsCount', previousElementsCount);
 
+    // await page.evaluate('window.scrollTo(0, document.body.scrollHeight)');  // 스크롤 크기값을 가져온다. 크기값을 변수에 담고 싶다면 let 변수 = await page.evaluate('window.scrollTo(0, document.body.scrollHeight)') 하면 된다.
+    let accElementsCount = 0; // 누적된 크롤링 데이터 갯수
+
+    while (true) {
       let ehList = await page.$$('article.production-item');
       for (let eh of ehList) {
         let id = await (await eh.getProperty('id')).jsonValue();
-        if (id === '') continue;
-        id = id.replace(/product-/g, '');
+        if (id === '') continue; // article.production-item 이 위에도 있는데 얘네는 크롤링 안할거다
+        id = id.replace(/product-/g, ''); // 모든 태그가 id = product-2345232 이런식으로 되어있는데 숫자만 쓰고 싶으니 replace 함수 적용
         idList.push(id);
       }
-      scrollCount++; // 반복문이 한 번 돌 때마다 scrollCount를 1 증가시킵니다
-      console.log(scrollCount);
+      // console.log(idList);
+
+      await page.evaluate('window.scrollTo(0, document.body.scrollHeight)'); // 페이지가 JS를 사용할 수 있게 한다. 즉, 브라우저가 스크롤을 제어할 수 있게 하는 코드
+      await page.waitForTimeout(1000); // 로딩하고 1초 기다리는 코드인데 얘 더이상 작동 안한댄다. 그래서 바로 밑에 await new Promise 로 변경했다.
+      await new Promise((resolve) => setTimeout(resolve, 1000)).catch((err) =>
+        console.error(err)
+      );
+
+      let currentElementsCount = await page.$$eval(
+        'article.production-item',
+        (elements) => elements.length
+      );
+      accElementsCount += currentElementsCount; // 크롤링 데이터 갯수 누적 합산
+
+      console.log('currentElementsCount:', currentElementsCount);
+      console.log('accElementsCount:', accElementsCount);
+      if (
+        // currentElementsCount === previousElementsCount ||
+        idList.length >= limit // accElementsCount >= limit로 설정했는데 currentElementsCount 값이 실행할 때마다 바뀌기 때문에 idList.length >= 50 으로 설정 변경
+      ) {
+        break;
+      }
+      previousElementsCount = currentElementsCount;
     }
 
-    // setTimeout(async () => {
-    //   clearInterval(infiniteScroll);
-    // }, 1000 * 10); // 10초 지나면 스크롤 종료
-    // // 5. 페이지와 브라우저를 닫습니다.
+    // console.log('idList.length:', idList.length);
+    // console.log('accElementsCount:', accElementsCount);
 
     // * 위에서 받은 리스트의 원소를 하나 씩 getItemInfo에 삽입 -> Promise.all 처리
     const itemInfoResults = await Promise.all(
       idList.map(async (itemId) => {
         const itemInfo = await getItemInfo(itemId);
+
         console.log(itemInfo);
-        return itemInfo;
-        // 만약 DB에 들어간다면?
-        // return await Item.create({brand: itemInfo.brand, name: itemInfo.name ... })
+        return itemInfo; // DB 에 저장하는 과정 없이 곧바로 클라이언트에게 반환하는 경우 주석 해제한 후 이 코드 사용
+
+        // 만약 DB에 저장 할거라면? 위의 return itemInfo; 코드라인을 주석 처리하고 아래의 코드를 주석 해제한 후 실행하면 된다.
+        // return await Items.create({
+        //   itemName: itemInfo.itemName,
+        //   category: itemInfo.category,
+        //   coverImage: JSON.stringify(itemInfo.coverImage), // DB의 coverImage 데이터 타입이 String이므로 문자열로 변환해줘야함.
+        //   brand: itemInfo.brand,
+        //   price: itemInfo.price,
+        //   content: JSON.stringify(itemInfo.content),
+        // });
       })
     );
-    await page.close();
-    await browser.close();
+    // console.log(idList);
+    await page.close(); // 페이지 닫기. (불필요한 메모리 낭비 방지)
+    await browser.close(); // 브라우저 닫기.(불필요한 메모리 낭비 방지)
 
-    return res.status(200).json(itemInfoResults);
+    return res.status(200).json(itemInfoResults); // DB 없이 클라이언트에 반환하는 경우
   }
 
   runCrawler().catch((err) => {
@@ -171,9 +220,14 @@ app.get('/api', async (req, res) => {
   });
 });
 
+// 서버 가동 코드
 app.listen(process.env.PORT || 3000, (req, res) => {
   console.log(`${process.env.PORT || 3000} 포트에 접속 되었습니다.`);
 });
+
+module.exports = router;
+
+//? 여기 부턴 일기장
 
 //   //todo 헤더 리스트에서 한 개의 항목에 대한 브랜드명, 제목, 가격을 추출
 //   let ehList = await page.$$(
@@ -217,9 +271,3 @@ app.listen(process.env.PORT || 3000, (req, res) => {
 // runCrawler().catch((err) => {
 //   console.error(err);
 // });
-
-// app.get('/api/puppe', async (req, res) => {
-
-// })
-
-// //todo 고객 센터 크롤링
