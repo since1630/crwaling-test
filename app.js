@@ -161,13 +161,7 @@ app.get('/', async (req, res) => {
     // 5.누적합산이 초기값 limit과 일치하거나 클 경우 크롤링을 중단하고 브라우저를 닫는다.
 
     let idList = [];
-    let limit = 50; // 원하는 크롤링 데이터 갯수 설정
-
-    // let previousElementsCount = await page.$$eval(
-    //   'article.production-item',
-    //   (elements) => elements.length
-    // );
-    // console.log('previousElementsCount', previousElementsCount);
+    let limit = 60; // 원하는 크롤링 데이터 갯수 설정
 
     // await page.evaluate('window.scrollTo(0, document.body.scrollHeight)');  // 스크롤 크기값을 가져온다. 크기값을 변수에 담고 싶다면 let 변수 = await page.evaluate('window.scrollTo(0, document.body.scrollHeight)') 하면 된다.
     let accElementsCount = 0; // 누적된 크롤링 데이터 갯수
@@ -198,14 +192,14 @@ app.get('/', async (req, res) => {
       console.log('accElementsCount:', accElementsCount);
       if (
         // currentElementsCount === previousElementsCount ||
-        idList.length >= limit // accElementsCount >= limit로 설정했는데 currentElementsCount 값이 실행할 때마다 바뀌기 때문에 idList.length >= 50 으로 설정 변경
+        idList.length >= limit
       ) {
         break;
       }
       previousElementsCount = currentElementsCount;
     }
 
-    // console.log('idList.length:', idList.length);
+    console.log('idList.length:', idList.length);
     // console.log('accElementsCount:', accElementsCount);
 
     // * 위에서 받은 리스트의 원소를 하나 씩 getItemInfo에 삽입 -> Promise.all 처리
@@ -217,15 +211,15 @@ app.get('/', async (req, res) => {
         return itemInfo; // DB 에 저장하는 과정 없이 곧바로 클라이언트에게 반환하는 경우 주석 해제한 후 이 코드 사용
 
         // 만약 DB에 저장 할거라면? 위의 return itemInfo; 코드라인을 주석 처리하고 아래의 코드를 주석 해제한 후 실행하면 된다.
-        return await Items.create({
-          itemName: itemInfo.itemName,
-          category: itemInfo.category,
-          coverImage: JSON.stringify(itemInfo.coverImage), // DB의 coverImage 데이터 타입이 String이므로 문자열로 변환해줘야함.
-          brand: itemInfo.brand,
-          price: itemInfo.price,
-          content: JSON.stringify(itemInfo.content),
-          coverMainImage: itemInfo.coverMainImage,
-        });
+        // return await Items.create({
+        //   itemName: itemInfo.itemName,
+        //   category: itemInfo.category,
+        //   coverImage: JSON.stringify(itemInfo.coverImage), // DB의 coverImage 데이터 타입이 String이므로 문자열로 변환해줘야함.
+        //   brand: itemInfo.brand,
+        //   price: itemInfo.price,
+        //   content: JSON.stringify(itemInfo.content),
+        //   coverMainImage: itemInfo.coverMainImage,
+        // });
       })
     );
     // console.log(idList);
